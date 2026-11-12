@@ -1,0 +1,30 @@
+{
+  "name": "seal-extractor",
+  "version": "1.1.0",
+  "description": "离线桌面工具：上传合同图片或 PDF，用 OpenCV.js 提取所有红色印章",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 5188",
+    "tauri": "tauri",
+    "dev:tauri": "tauri dev",
+    "release": "tauri build",
+    "release:portable": "tauri build --no-bundle && node scripts/build-portable.mjs",
+    "test": "node tests/detector.test.mjs && node tests/repair.test.mjs && node tests/save.test.mjs",
+    "test:repair": "node tests/repair.test.mjs",
+    "test:save": "node tests/save.test.mjs"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-dialog": "^2",
+    "@tauri-apps/plugin-fs": "^2",
+    "jszip": "^3.10.1",
+    "pdfjs-dist": "^4.10.38"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "vite": "^6.3.5"
+  }
+}

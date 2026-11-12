@@ -1,0 +1,159 @@
+name: 打包与发布（Windows / macOS）
+
+# 触发方式：
+#   1) push / PR 到 main：只跑算法回归与 Rust 单测，不打包
+#   2) 打 tag：git tag v1.1.0 && git push origin v1.1.0 → 构建并创建草稿 Release
+#   3) 手动：Actions 页 → Run workflow（重新打包验证）
+#
+# 产物统一 ASCII 命名，四件套：
+#   SealExtractor-1.1.0-setup-win-x64.exe
+#   SealExtractor-1.1.0-portable-win-x64.zip
+#   SealExtractor-1.1.0-aarch64.dmg
+#   SealExtractor-1.1.0-aarch64.app.zip
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    name: 算法回归与 Rust 单测
+    if: github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --manifest-path src-tauri/Cargo.toml --lib
+
+  build-windows:
+    name: Windows（安装版 + 便携版）
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: 安装前端依赖
+        run: npm ci
+
+      - name: 算法回归与 Rust 单测
+        run: |
+          npm test
+          cargo test --manifest-path src-tauri/Cargo.toml --lib
+
+      - name: 构建 Tauri（NSIS 安装版 + exe）
+        run: npm run tauri build
+
+      - name: 打包便携版 zip（exe + 说明 + 许可 + 示例，ASCII 命名）
+        run: node scripts/build-portable.mjs
+
+      - name: 规范化安装版文件名为 ASCII
+        shell: pwsh
+        run: |
+          $nsis = Get-ChildItem 'src-tauri/target/release/bundle/nsis/*-setup.exe' | Select-Object -First 1
+          if (-not $nsis) { throw '未找到 NSIS 安装包' }
+          New-Item -ItemType Directory -Force -Path 'release' | Out-Null
+          Copy-Item $nsis.FullName 'release/SealExtractor-1.1.0-setup-win-x64.exe' -Force
+
+      - name: 上传 Windows 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer-and-portable
+          path: |
+            release/SealExtractor-1.1.0-setup-win-x64.exe
+            release/SealExtractor-1.1.0-portable-win-x64.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  build-macos:
+    name: macOS（dmg + app，Apple Silicon）
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: 安装前端依赖
+        run: npm ci
+
+      # 未签名构建：首次打开可能触发 Gatekeeper，可执行 xattr -dr com.apple.quarantine。
+      - name: 构建 Tauri（macOS .app + .dmg）
+        run: npm run tauri build -- --target aarch64-apple-darwin --bundles app,dmg
+
+      - name: 规范化 macOS 产物文件名（ASCII + app.zip）
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          dmg=$(find src-tauri/target/aarch64-apple-darwin/release/bundle/dmg -maxdepth 1 -name '*.dmg' | head -n 1)
+          app=$(find src-tauri/target/aarch64-apple-darwin/release/bundle/macos -maxdepth 1 -name '*.app' | head -n 1)
+          [ -n "$dmg" ] || { echo "未找到 dmg"; exit 1; }
+          [ -n "$app" ] || { echo "未找到 app"; exit 1; }
+          cp "$dmg" release/SealExtractor-1.1.0-aarch64.dmg
+          ditto -c -k --keepParent "$app" release/SealExtractor-1.1.0-aarch64.app.zip
+          ls -lh release/
+
+      - name: 上传 macOS 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-apple-silicon
+          path: |
+            release/SealExtractor-1.1.0-aarch64.dmg
+            release/SealExtractor-1.1.0-aarch64.app.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: 创建草稿 Release（仅打 tag 时）
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: 发布草稿 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          # 显式绑定 tag，否则草稿会落在 untagged-* 上，发布后链接不稳定。
+          tag_name: ${{ github.ref_name }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          files: artifacts/**/*

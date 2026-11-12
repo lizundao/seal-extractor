@@ -1,0 +1,29 @@
+[package]
+name = "seal-extractor"
+version = "1.1.0"
+description = "离线合同红色印章提取工具 (OpenCV.js + Tauri)"
+edition = "2021"
+
+[lib]
+name = "seal_extractor_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+base64 = "0.22"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+panic = "abort"
+strip = true
+lto = true
+codegen-units = 1

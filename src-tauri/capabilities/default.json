@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "允许保存对话框与文件夹选择",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "dialog:allow-save",
+    "dialog:allow-open"
+  ]
+}

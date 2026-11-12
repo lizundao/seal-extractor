@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>印章提取 · 合同红色印章识别</title>
+  <link rel="icon" type="image/png" href="./favicon.png" />
+  <link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo">印</div>
+        <div class="brand-text">
+          <h1>印章提取</h1>
+          <p>上传合同，自动找出所有红色印章 · 本地离线处理</p>
+        </div>
+      </div>
+      <div class="top-actions">
+        <span id="engineBadge" class="badge loading"><i></i>引擎加载中</span>
+        <button id="btnOpen" class="btn primary" disabled>打开合同</button>
+        <button id="btnClear" class="btn ghost" disabled>清空</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="panel left">
+        <section class="block">
+          <div class="block-head">
+            <h2>文件 / 页面</h2>
+            <span id="pageCount" class="muted">0</span>
+          </div>
+          <div id="pageList" class="page-list">
+            <div class="hint">尚未添加文件</div>
+          </div>
+        </section>
+
+        <section class="block params">
+          <div class="block-head">
+            <h2>识别参数</h2>
+            <button id="btnResetParams" class="link-btn">恢复默认</button>
+          </div>
+
+          <label class="ctrl">
+            <span>红色饱和度下限 <b id="valSat">70</b></span>
+            <input id="pSat" type="range" min="25" max="150" step="1" value="70" />
+            <small>印章褪色、扫描偏淡时调低；误报红字时调高</small>
+          </label>
+
+          <label class="ctrl">
+            <span>最小印章边长 <b id="valSize">自动</b></span>
+            <input id="pSize" type="range" min="20" max="320" step="5" value="0" />
+            <small>0 = 按页面分辨率自动判断，漏检小章时调小</small>
+          </label>
+
+          <label class="ctrl">
+            <span>形状比上限 <b id="valAspect">2.6</b></span>
+            <input id="pAspect" type="range" min="1.1" max="4.5" step="0.1" value="2.6" />
+            <small>越大越能容纳长条章，也越容易误收红色横线</small>
+          </label>
+
+          <label class="ctrl">
+            <span>红色密度下限 <b id="valDensity">4.5%</b></span>
+            <input id="pDensity" type="range" min="1" max="20" step="0.5" value="4.5" />
+            <small>框内红色笔画占比，低于此值视为干扰</small>
+          </label>
+
+          <label class="ctrl">
+            <span>笔画连接强度 <b id="valClose">0.16</b></span>
+            <input id="pClose" type="range" min="0.06" max="0.34" step="0.01" value="0.16" />
+            <small>印章笔画稀疏、被拆成多块时调大</small>
+          </label>
+
+          <label class="ctrl">
+            <span>重叠框合并 <b id="valMerge">0.32</b></span>
+            <input id="pMerge" type="range" min="0.05" max="0.8" step="0.01" value="0.32" />
+            <small>相邻多枚章被错误合并时调小</small>
+          </label>
+
+          <label class="check">
+            <input id="pDenoise" type="checkbox" />
+            <span>去除孤立噪点 <small>扫描件杂点多时开启</small></span>
+          </label>
+
+          <button id="btnApplyAll" class="btn outline full" disabled>把参数应用到全部页面</button>
+        </section>
+      </aside>
+
+      <section class="workspace">
+        <div class="workspace-bar">
+          <div class="crumb"><span id="currentName">预览</span></div>
+          <div class="view-tools">
+            <label class="inline-select">PDF 清晰度
+              <select id="pdfScale">
+                <option value="1.5">1.5×</option>
+                <option value="2" selected>2×</option>
+                <option value="2.5">2.5×</option>
+                <option value="3">3×</option>
+              </select>
+            </label>
+            <div class="zoom-group">
+              <button class="zoom-btn active" data-zoom="fit">适应</button>
+              <button class="zoom-btn" data-zoom="1">100%</button>
+              <button class="zoom-btn" data-zoom="0.5">50%</button>
+            </div>
+            <button id="btnRedetect" class="btn ghost small" disabled>重新识别</button>
+          </div>
+        </div>
+
+        <div id="canvasWrap" class="canvas-wrap">
+          <canvas id="preview" hidden></canvas>
+          <div id="emptyState" class="empty">
+            <div class="empty-icon">◎</div>
+            <h3>把合同拖到这里</h3>
+            <p>支持 JPG / PNG / WEBP / BMP 图片，以及多页 PDF</p>
+            <button id="btnPick" class="btn primary" disabled>选择文件</button>
+            <p class="tiny">文件只在本机内存中处理，不会上传</p>
+          </div>
+          <div id="dropOverlay" class="drop-overlay" hidden>松开鼠标，添加合同</div>
+        </div>
+
+        <div class="statusbar">
+          <span id="statusText">正在准备运行环境…</span>
+          <span id="statusStat" class="muted"></span>
+        </div>
+      </section>
+
+      <aside class="panel right">
+        <div class="block-head right-head">
+          <h2>识别结果</h2>
+          <span id="sealCount" class="badge count">0 枚</span>
+        </div>
+        <div class="right-tools">
+          <label class="inline-select">输出
+            <select id="outputMode">
+              <option value="transparent">透明底红章</option>
+              <option value="white">白底红章</option>
+              <option value="crop">原图裁切</option>
+              <option value="clean">去黑字裁切</option>
+            </select>
+          </label>
+          <div class="select-tools">
+            <button id="btnSelectAll" class="link-btn">全选</button>
+            <button id="btnSelectNone" class="link-btn">全不选</button>
+          </div>
+        </div>
+        <div class="render-tools">
+          <label class="check compact-check">
+            <input id="optRepair" type="checkbox" checked />
+            <span>补色修复黑色压字 <small>补齐被黑字盖住的笔画、清掉章内杂点，并统一章色消除暗红噪点</small></span>
+          </label>
+          <label class="ctrl compact-ctrl" id="radiusRow">
+            <span>补色半径 <b id="valRadius">6 px</b></span>
+            <input id="optRadius" type="range" min="2" max="16" step="1" value="6" />
+            <small>黑色笔画越粗调越大；太大可能把相邻笔画连起来</small>
+          </label>
+        </div>
+        <div id="sealList" class="seal-list">
+          <div class="hint">识别到的印章会显示在这里</div>
+        </div>
+        <div class="export-bar">
+          <button id="btnExportZip" class="btn primary full" disabled>导出所选（ZIP）</button>
+          <button id="btnExportFolder" class="btn outline full" disabled hidden>导出到文件夹</button>
+          <p class="tiny" id="exportHint">勾选需要的印章，导出为独立 PNG</p>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <input id="fileInput" type="file" multiple
+    accept="image/*,.pdf,.png,.jpg,.jpeg,.webp,.bmp,.tif,.tiff" hidden />
+  <div id="toast" class="toast" hidden></div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

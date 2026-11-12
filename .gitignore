@@ -1,0 +1,18 @@
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/schemas/
+.tmp/
+tests/out/
+tests/fixtures/*.png
+*.log
+.DS_Store
+
+# 本地打包产物与预览截图（不入库）
+release/
+*.zip
+.preview-shots/
+.playwright-cli/
+
+# 注意：LICENSE、LICENSE.zh-CN.md、public/opencv.js 必须入库
+
