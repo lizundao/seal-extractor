@@ -13,6 +13,8 @@ release/
 *.zip
 .preview-shots/
 .playwright-cli/
+# 官网配图源截图（仅本地生成教程配图用，不进源码仓库）
+ScreenShot_*.png
 
 # 注意：LICENSE、LICENSE.zh-CN.md、public/opencv.js 必须入库
 
