@@ -24,7 +24,7 @@ permissions:
 
 jobs:
   check:
-    name: 算法回归与 Rust 单测
+    name: 前端算法回归
     if: github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
@@ -35,8 +35,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test --manifest-path src-tauri/Cargo.toml --lib
+      # Rust 单测放在 Windows build job（Tauri 在 Linux 需 GTK 系统库，
+      # 无头 runner 默认不装；Windows 构建本来就跑，无需额外系统依赖）
 
   build-windows:
     name: Windows（安装版 + 便携版）
