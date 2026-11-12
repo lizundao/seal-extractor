@@ -62,6 +62,8 @@ jobs:
       - name: 算法回归与 Rust 单测
         run: |
           npm test
+          # generate_context!() 要求 frontendDist(../dist) 存在，测试前先构建前端
+          npm run build
           cargo test --manifest-path src-tauri/Cargo.toml --lib
 
       - name: 构建 Tauri（NSIS 安装版 + exe）
